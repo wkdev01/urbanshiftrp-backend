@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -5,6 +6,7 @@ namespace UrbanShiftRP.Controllers;
 
 [ApiController]
 [Route("admin")]
+[Authorize]
 public class AdminController : ControllerBase
 {
     private UrbanShiftRPDb _db;
@@ -16,7 +18,6 @@ public class AdminController : ControllerBase
         _config = config;
     }
 
-    // nao tem autenticação aqui ainda to deixando pra depois
     [HttpGet("players")]
     public async Task<IActionResult> GetPlayers()
     {
@@ -85,7 +86,7 @@ public class AdminController : ControllerBase
         if(player == null) return NotFound();
 
         player.Banido = false;
-        player.MotivoBan = null;
+        player.MotivoBan = string.Empty;
         await _db.SaveChangesAsync();
 
         return Ok();
@@ -121,5 +122,5 @@ public class AdminController : ControllerBase
 
 public class BanReq
 {
-    public string Motivo { get; set; }
+    public string Motivo { get; set; } = string.Empty;
 }

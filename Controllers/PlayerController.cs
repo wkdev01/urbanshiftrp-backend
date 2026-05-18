@@ -35,6 +35,10 @@ public class PlayerController : ControllerBase
     [HttpPost("{id}/evento")]
     public async Task<IActionResult> PostEvento(int id, [FromBody] EventoReq req)
     {
+        var player = await _db.Players.FindAsync(id);
+        if(player == null)
+            return NotFound();
+
         var ev = new Evento();
         ev.PlayerId = id;
         ev.Tipo = req.Tipo;
@@ -42,22 +46,17 @@ public class PlayerController : ControllerBase
         ev.Data = DateTime.Now;
 
         _db.Eventos.Add(ev);
-        await _db.SaveChangesAsync();
-
-        // atualiza kills e mortes do player
-        // BUG: se o player nao existir isso vai dar null reference
-        var player = await _db.Players.FindAsync(id);
 
         if(req.Tipo == "kill")
         {
             player.Kills += 1;
-            await _db.SaveChangesAsync();
         }
-        if(req.Tipo == "morte")
+        else if(req.Tipo == "morte")
         {
             player.Mortes += 1;
-            await _db.SaveChangesAsync();
         }
+
+        await _db.SaveChangesAsync();
 
         return Ok();
     }
@@ -111,11 +110,11 @@ public class PlayerController : ControllerBase
 
 public class EventoReq
 {
-    public string Tipo { get; set; }
-    public string Dados { get; set; }
+    public string Tipo { get; set; } = string.Empty;
+    public string Dados { get; set; } = string.Empty;
 }
 public class TransacaoReq
 {
     public decimal Valor { get; set; }
-    public string Tipo { get; set; }
+    public string Tipo { get; set; } = string.Empty;
 }

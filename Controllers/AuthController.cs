@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using Microsoft.IdentityModel.Tokens;
 
 namespace UrbanShiftRP.Controllers;
@@ -13,19 +14,41 @@ public class AuthController : ControllerBase
 {
     private UrbanShiftRPDb _db;
     private IConfiguration _config;
+    private IHttpClientFactory _httpFactory;
 
-    public AuthController(UrbanShiftRPDb db, IConfiguration config)
+    public AuthController(UrbanShiftRPDb db, IConfiguration config, IHttpClientFactory httpFactory)
     {
         _db = db;
         _config = config;
+        _httpFactory = httpFactory;
     }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginReq req)
     {
-        if(req.RobloxId == null || req.RobloxId == "")
+        if(string.IsNullOrWhiteSpace(req.RobloxId))
         {
             return BadRequest("robloxId vazio");
+        }
+
+        if(!long.TryParse(req.RobloxId, out var robloxId))
+        {
+            return BadRequest("robloxId invalido");
+        }
+
+        var http = _httpFactory.CreateClient();
+        var robloxResponse = await http.GetAsync($"https://users.roblox.com/v1/users/{robloxId}");
+        if(!robloxResponse.IsSuccessStatusCode)
+        {
+            return BadRequest("robloxId nao encontrado");
+        }
+
+        var json = await robloxResponse.Content.ReadAsStringAsync();
+        var robloxDoc = JsonDocument.Parse(json).RootElement;
+        var robloxName = robloxDoc.GetProperty("name").GetString() ?? string.Empty;
+        if(string.IsNullOrWhiteSpace(robloxName))
+        {
+            robloxName = req.RobloxId;
         }
 
         var player = await _db.Players.FirstOrDefaultAsync(p => p.RobloxId == req.RobloxId);
@@ -34,12 +57,15 @@ public class AuthController : ControllerBase
         {
             player = new Player();
             player.RobloxId = req.RobloxId;
-            player.Nome = req.RobloxId;
+            player.Nome = robloxName;
             player.CriadoEm = DateTime.Now;
             player.UltimoLogin = DateTime.Now;
 
             _db.Players.Add(player);
-            await _db.SaveChangesAsync();
+        }
+        else
+        {
+            player.Nome = robloxName;
         }
 
         if(player.Banido == true)
@@ -51,6 +77,11 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
 
         var secret = _config["JWT_SECRET"];
+        if(string.IsNullOrWhiteSpace(secret))
+        {
+            return StatusCode(500, "JWT_SECRET nao configurado");
+        }
+
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
@@ -97,7 +128,7 @@ public class AuthController : ControllerBase
 
 public class LoginReq
 {
-    public string RobloxId { get; set; }
+    public string RobloxId { get; set; } = string.Empty;
 }
 public class LogoutReq
 {
